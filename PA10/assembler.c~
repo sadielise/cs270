@@ -1,0 +1,956 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <strings.h>
+#include <stdarg.h>
+
+#include "assembler.h"
+#include "field.h"
+#include "lc3.h"
+#include "symbol.h"
+#include "tokens.h"
+#include "util.h"
+
+/** Global variable containing the head of the linked list of structures */
+static line_info_t* infoHead;
+
+/** Global variable containing the tail of the linked list of structures */
+static line_info_t* infoTail;
+
+/** Global variable containing information about the current line */
+static line_info_t* currInfo;
+
+//Global variable containing the string to print for the disassembler
+static char* lineToPrint;
+
+void asm_init_line_info (line_info_t* info) {
+  if (info) {
+    info->next        = NULL;
+    info->lineNum     = srcLineNum;
+    info->address     = currAddr;
+    info->machineCode = 0;
+    info->opcode      = OP_INVALID;
+    info->form        = 0;
+    info->reg1        = -1;
+    info->reg2        = -1;
+    info->reg3        = -1;
+    info->immediate   = 0;
+    info->reference   = NULL;
+  }
+}
+
+void asm_print_line_info (line_info_t* info) {
+  if (info) {
+    printf("%3d: address: x%04x machineCode:%04x op: %s form: %d reg1:%3d, reg2:%3d reg3:%3d imm: %d ref: %s\n",
+           info->lineNum, info->address, info->machineCode,
+           lc3_get_opcode_name(info->opcode), info->form, info->reg1,
+           info->reg2, info->reg3, info->immediate, info->reference);
+  }
+ }
+
+/* based on code from http://www.eskimo.com/~scs/cclass/int/sx11c.html */
+void asm_error (char* msg, ...) {
+   numErrors++;
+   va_list argp;
+   fprintf(stderr, "ERROR %3d: ", srcLineNum);
+   va_start(argp, msg);
+   vfprintf(stderr, msg, argp);
+   va_end(argp);
+   fprintf(stderr, "\n");
+}
+
+void asm_init (void) {
+  infoHead = infoTail = currInfo = NULL; 
+  tokens_init();
+  lc3_sym_tab = symbol_init(0); 
+}
+
+/** performs the processing required in the first pass
+ *  must check for the syntax of each instruction and create the symbol table
+ *  it will also create a data structure for use by the second pass
+ *  @param asm_file_name name of the file to assemble
+ *  @param sym_file_name name of the symbol table file
+ */
+void dsm_pass_one (char* dsm_file_name, char* sym_file_name) {
+	//char line[MAX_LINE_LENGTH];
+	//1.  open the source file and report an error
+	FILE* fp = open_read_or_error(dsm_file_name);
+	if(fp!=NULL){
+	unsigned int line;
+	int blockCount = 0;
+	
+	while(!feof(fp)){
+		//2. read the lines one at a time using fgets
+		srcLineNum++;
+		fscanf(fp, "%x", &line);
+		printf("%x\n", line);
+
+		//4.1 allocate a new line_info_t store it in the global variable
+		// currInfo and initialize it
+		currInfo = calloc(1, sizeof(line_info_t));
+		//printf("calloc %p\n", currInfo);
+		asm_init_line_info(currInfo);
+		//printf("4.1 complete\n");
+		//add line to currInfo->machine code
+		currInfo->machineCode = line;
+		//printf("machineCode: %x\n", line);
+
+		if(line==0){
+			while(line==0){
+				fscanf(fp, "%x", &line);
+				blockCount++;
+			}
+			currInfo->immediate = blockCount;
+			currInfo->opcode = OP_BLKW;
+		}
+		
+		//4.3 send line to be checked by check_machine_code
+		else
+			check_machine_code(line);
+
+		asm_print_line_info(currInfo);
+
+		//4.4 add it to the linked list defined by infoHead and infoTail
+		//if the list is empty
+		if(infoHead==NULL){
+			infoHead = currInfo;
+			infoTail = currInfo;			
+		}
+		else{			
+			infoTail->next = currInfo;
+			infoTail = currInfo;
+		}
+
+		//4.5 update the current address
+		update_address();
+		if(currInfo->opcode == OP_END)
+			break;
+			
+	}
+		FILE* fp1 = open_read_or_error(sym_file_name);
+		if(fp1!=NULL){
+			lc3_read_sym_table(fp1);
+			fclose(fp1);
+		}
+		fclose(fp);
+	}
+}
+
+//concatenates word to lineToPrint in the correct place
+void setStringField(char* word, int start){
+	for(int i = 0; i < strlen(word); i++){
+		lineToPrint[i+start] = word[i];
+	}
+}
+
+void operandToString(operand_t operand){
+	char* temp = calloc(41, sizeof(char));
+  switch (operand) {
+    case FMT_R1:
+			if(currInfo->reg1 != -1){
+				sprintf(temp, "R%d,", currInfo->reg1);
+				strcat(lineToPrint, temp);	
+			}
+      break;
+		case FMT_R2:
+			if(currInfo->reg2 != -1){ 
+				sprintf(temp, "R%d", currInfo->reg2);
+				strcat(lineToPrint, temp);	
+				if(currInfo->opcode!=OP_JMP_RET && currInfo->opcode!=OP_JSR_JSRR){
+					strcat(lineToPrint, ",");
+				}
+			}
+			break;
+		case FMT_R3:
+			if(currInfo->reg3 != -1){
+				sprintf(temp, "R%d", currInfo->reg1);
+				strcat(lineToPrint, temp);
+			}
+			break;
+		case FMT_IMM5:
+		case FMT_IMM6:
+		{
+			sprintf(temp, "#%d", currInfo->immediate);
+			strcat(lineToPrint, temp);
+		}
+			break;
+		case FMT_VEC8:
+		{
+			sprintf(temp, "%d", currInfo->reg1);
+			strcat(lineToPrint, temp);
+		}
+			break;
+		case FMT_PCO9:
+		case FMT_PCO11:
+		{
+			int address = currInfo->address + 1 + currInfo->immediate;
+			char* symbol = symbol_find_by_addr(lc3_sym_tab, address);
+			if(symbol!=NULL){
+				strcat(lineToPrint, symbol);
+			}
+		}
+			break;
+		case FMT_IMM16:
+		{
+			sprintf(temp, "x%04x", currInfo->immediate);
+			strcat(lineToPrint, temp);
+		}
+		break;
+		case FMT_STR:
+			//currInfo->reference = strdup(token);
+			break;
+    default://????
+      break;
+  }
+
+	free(temp);
+}
+
+
+void dsm_pass_two (char* obj_file_name) {
+	FILE* fp = open_write_or_error(obj_file_name);
+	lineToPrint = calloc(41, sizeof(char));
+	char* temp = calloc(41, sizeof(char));
+
+	if(fp!=NULL){
+		//iterate through line_info structures as before
+		currInfo = infoHead;
+		while(currInfo!=NULL){
+			srcLineNum = currInfo -> lineNum;
+			//set all chars in linetoprint to spaces or null
+			for(int j = 0; j<21; j++){
+				lineToPrint[j] = ' ';
+			}
+			for(int k = 21; k<40; k++){
+				lineToPrint[k] = '\0';
+			}
+
+			//check if there is a symbol at the specifired address
+			char* symbol = symbol_find_by_addr(lc3_sym_tab, currInfo->address);
+							printf("label %s\n", symbol);
+			if(symbol!=NULL){
+
+				setStringField(symbol, 0);
+			}
+
+			//printf("debug1\n");
+
+			LC3_inst_t* inst = lc3_get_inst_info(currInfo->opcode);
+			operands_t operands = inst->forms[currInfo->form].operands;
+			temp = inst->forms[currInfo->form].name;
+			setStringField(temp, 14);
+
+			//printf("debug2\n");
+
+			if(currInfo->opcode!= OP_INVALID){
+					//special case for br		
+					if(currInfo->opcode == OP_BR){
+						if(currInfo->reg1 == util_parse_cond("n"))
+							setStringField("n", 16);
+						else if(currInfo->reg1 == util_parse_cond("z"))
+							setStringField("z", 16);
+						else if(currInfo->reg1 == util_parse_cond("p"))
+							setStringField("p", 16);
+						else if(currInfo->reg1 == util_parse_cond("nz"))
+							setStringField("nz", 16);
+						else if(currInfo->reg1 == util_parse_cond("np"))
+							setStringField("np", 16);
+						else if(currInfo->reg1 == util_parse_cond("zp"))
+							setStringField("zp", 16);
+						else if(currInfo->reg1 == util_parse_cond("nzp"))
+							setStringField("nzp", 16);
+					}
+	
+					//initialize a count of the number of errors found before this function was called
+					int errorCount   = numErrors;
+	
+					//loop over all the possible operand types.
+					//if the operand type is used by this LC3 instruction
+	 	 			for (operand_t op = FMT_R1; op <= FMT_STR; op <<= 1) {
+	 	 	  		if (errorCount != numErrors)
+	 	 	    		break;; // error, so skip processing remainder of line
+						if(op&operands){
+								operandToString(op);
+						}
+	  			}
+					fprintf(fp, "%s\n", lineToPrint);	
+					printf("Linetoprint: %s\n", lineToPrint);
+				//}//end else
+			}
+			currInfo = currInfo->next;
+		}//end while
+		for(int j = 0; j<40; j++){
+				lineToPrint[j] = ' ';
+			}
+		setStringField(".END", 14);
+		fprintf(fp, lineToPrint);
+		free(lineToPrint);
+		fclose(fp);
+	}//end if null
+}
+
+/** performs the processing required in the first pass
+ *  must check for the syntax of each instruction and create the symbol table
+ *  it will also create a data structure for use by the second pass
+ *  @param asm_file_name name of the file to assemble
+ *  @param sym_file_name name of the symbol table file
+ */
+void asm_pass_one (char* asm_file_name, char* sym_file_name) {
+	char line[MAX_LINE_LENGTH];
+	//1.  open the source file and report an error
+	FILE* fp = open_read_or_error(asm_file_name);
+	char* token = NULL;
+	if(fp!=NULL){
+	
+	while(!feof(fp)){
+		//2. read the lines one at a time using fgets
+		srcLineNum++;
+		fgets(line, sizeof(line), fp);
+		//printf("%s\n", line);
+		
+		//3. convert the line to a list of tokens
+		token = tokenize_line(line);
+
+		//printing for debugging
+		//print_tokens();
+		//4. if there are any tokens on the line then, 
+		if(token!=NULL){
+			//4.1 allocate a new line_info_t store it in the global variable
+			// currInfo and initialize it
+			currInfo = calloc(1, sizeof(line_info_t));
+			//printf("calloc %p\n", currInfo);
+			asm_init_line_info(currInfo);
+			//printf("4.1 complete\n");
+		
+			//4.2 convert the source line to a list of tokens...done already i think...
+			//4.3 convert the tokens to valuesand set the appropriate fields of currInfo
+			check_line_syntax(token);
+
+			//4.4 add it to the linked list defined by infoHead and infoTail
+			//if the list is empty
+			if(infoHead==NULL){
+				infoHead = currInfo;
+				infoTail = currInfo;
+			
+			}
+			else{			
+				infoTail->next = currInfo;
+				infoTail = currInfo;
+			}
+			//printf("4.4\n");
+
+			//4.5 update the current address
+			update_address();
+			if(currInfo->opcode == OP_END){
+				break;
+			}
+			
+		}
+		
+	}
+	//5. if there were no errors, write the symbol table file using lc3as_write_sym_tab()
+	FILE* fp1 = open_write_or_error(sym_file_name);
+	if(fp1!=NULL){
+		lc3_write_sym_table(fp1);
+		fclose(fp1);
+	}
+	fclose(fp);
+
+	}
+}
+
+/** 
+ * generates the object file
+ * only called if no errors were found during asm_pass_one()
+ * loop over the data structure created in pass one and generate object code and write it to the object file
+ */
+void asm_pass_two (char* obj_file_name) {
+
+	//debugging!!!	
+	//line_info_t* debug = infoHead;
+	//while(debug!=NULL){
+	//	asm_print_line_info(debug);
+	//	debug = debug->next;
+	//}
+	
+	//Pass two starts here
+
+	FILE* fp = open_write_or_error(obj_file_name);
+	if(fp!=NULL){
+	currInfo = infoHead;
+	while(currInfo!=NULL){
+		srcLineNum = currInfo -> lineNum;
+		if(currInfo->opcode!= OP_INVALID){
+			if(currInfo->opcode==OP_ORIG){
+				currInfo->machineCode = currInfo->address;
+				fprintf(fp, "%04x\n", currInfo->machineCode);	
+			}
+			else if(currInfo->opcode == OP_FILL){
+				currInfo->machineCode = currInfo->immediate;	
+				fprintf(fp, "%04x\n", currInfo->machineCode);	
+			}
+			else if(currInfo->opcode ==OP_BLKW){
+				for(int i = 0; i < currInfo->immediate; i++){
+					fprintf(fp, "%04x\n", currInfo->machineCode);	
+				}
+			}
+			else if(currInfo->opcode == OP_END){
+				//do nothing, machine code stays at zero
+			}
+			else{
+				//get all of the operands
+				LC3_inst_t* inst = lc3_get_inst_info(currInfo->opcode);
+				currInfo->machineCode = inst->forms[currInfo->form].prototype;
+				operands_t operands = inst->forms[currInfo->form].operands;		
+
+				if(currInfo->opcode == OP_BR){
+					currInfo->machineCode = setField(currInfo->machineCode, 11, 9, currInfo->reg1);
+		
+				}
+
+				//initialize a count of the number of errors found before this function was called
+				int errorCount   = numErrors;
+
+				//loop over all the possible operand types.
+				//if the operand type is used by this LC3 instruction
+ 	 			for (operand_t op = FMT_R1; op <= FMT_STR; op <<= 1) {
+ 	 	  		if (errorCount != numErrors)
+ 	 	    		break;; // error, so skip processing remainder of line
+					if(op&operands){
+							encode_operand(op);
+					}
+  			}
+				fprintf(fp, "%04x\n", currInfo->machineCode);	
+			}//end else
+		}
+		currInfo = currInfo->next;
+	}
+	fclose(fp);
+	}
+	
+}
+
+/** 
+ * cleanup everything used by the assembler
+ */
+void asm_term (void) {
+	line_info_t* temp = infoHead;
+	line_info_t* temp2; 
+	//iterate through array symTab
+		while(temp != NULL){
+			temp2 = temp->next;
+			if(temp->reference !=NULL){
+				free(temp->reference);
+				//printf("free reference\n");
+			}
+			temp->next = NULL;
+			free(temp);
+			//printf("freetemp\n");
+			temp = temp2;
+		}
+	symbol_term(lc3_sym_tab);
+	tokens_term();
+}
+
+void check_machine_code(int code){
+
+	if(currInfo->lineNum == 1){
+		currInfo->opcode = OP_ORIG;
+		currInfo->address = code;
+		currInfo->immediate = code;
+	}
+
+	else{
+		int opcode = getField(code, 15, 12, 0);
+		currInfo->opcode = opcode;	
+		LC3_inst_t* operands = lc3_get_inst_info(opcode);	
+
+
+		if(operands){
+			int form = 0;
+			//check if the opcode is branch and handle the case	
+			if(currInfo->opcode == OP_BR)
+				currInfo->reg1 = getField(code, 11, 9, 0);		
+			else{
+				if(opcode == OP_JSR_JSRR){
+					if(getField(code, 11, 11, 0) != 1)
+						form = 1;
+				}
+				if(opcode == OP_JMP_RET){
+					if(getField(code, 8, 6, 0) == 7)
+						form = 1;
+				}
+			}
+			currInfo->form = form;
+			loop_operands(operands->forms[form].operands);
+		}
+	}
+
+}
+
+void write_operands (operand_t operand) {
+  switch (operand) {
+    	case FMT_R1:
+		case FMT_CC:
+     		currInfo->reg1 = getField(currInfo->machineCode, 11, 9, 0);
+      	break;
+		case FMT_R2:
+     		currInfo->reg2 = getField(currInfo->machineCode, 8, 6, 0);
+		break;
+		case FMT_R3:
+     		currInfo->reg3 = getField(currInfo->machineCode, 2, 0, 0);
+		break;
+		case FMT_IMM5:
+     		currInfo->immediate = getField(currInfo->machineCode, 4, 0, 1);
+		break;
+		case FMT_IMM6:
+     		currInfo->immediate = getField(currInfo->machineCode, 5, 0, 1);
+		break;
+		case FMT_VEC8:
+     		currInfo->immediate = getField(currInfo->machineCode, 7, 0, 0);
+		break;
+		case FMT_PCO9:
+			currInfo->immediate = getField(currInfo->machineCode, 8, 0, 1);
+		break;
+		case FMT_PCO11:
+			currInfo->immediate = getField(currInfo->machineCode, 10, 0, 1);
+		break;
+		case FMT_STR:
+			//currInfo->reference = strdup(token);
+			break;
+   		default:
+      		break;
+  }
+}
+
+void loop_operands (operands_t operands) {
+
+	//3. loop over all the possible operand types.
+	//if the operand type is used by this LC3 instruction
+  for (operand_t op = FMT_R1; op <= FMT_STR; op <<= 1) {
+
+    //check if an operand is used
+    if(op&operands){
+	//get the next token and convert it to an operand
+	write_operands(op);
+    }
+		
+  }
+
+}
+
+
+/**check if the token is a label
+ * if the token is not a valid opcode, assume it is a label
+ * if it is a valid label add it to the symbol table
+ * @return the next token if the token is a label
+ * @return the parameter otherwise
+ */
+char* check_for_label (char* token) {
+	int temp = util_get_opcode(token);
+	//if temp is -1 then the token is not an opcode
+	//function should check if it is a valid label and return it
+	if(temp==-1){
+		temp = util_is_valid_label(token);
+		if(temp ==0){
+			//if temp = 0 then not a valid label throw an error
+			asm_error(ERR_BAD_LABEL, token);
+			return next_token();
+		}
+		else{		
+			//it is a valid label so add to the symbol table and return next token
+			symbol_t* sym = symbol_find_by_name(lc3_sym_tab, token);
+			if(sym!=NULL){
+				asm_error(ERR_DUPLICATE_LABEL, token);
+			}
+			else symbol_add(lc3_sym_tab, token, currAddr);
+			//printf("strdup to symbol table\n");
+			return next_token();
+		}
+	}
+  else return token;
+}
+
+/** 
+ * checks if the syntax of the source line
+ * at conclusion of function, the appropriate 
+ * fields of the global currInfo are initialized
+ */
+void check_line_syntax (char* token) {
+  //printf("check_line_syntax('%s')\n", token);
+	//1. determine if the first token is a label
+	token = check_for_label(token);
+
+	//if the token is null then move on to the next line
+	if(token==NULL) return;
+
+
+	//2. convert the first/next token to an opcode and store it into your data structure
+	int opcode = util_get_opcode(token);
+
+	//if opcode is -1 then the opcode is not valid
+	if(opcode == -1){
+		asm_error(ERR_MISSING_OP, token);
+		return;
+	}		
+	//add the opcode to currInfo
+	currInfo->opcode = opcode;
+
+	//3. determine the list of operands corresponding to this opcode
+	LC3_inst_t* operands = lc3_get_inst_info(opcode);
+	
+	//4. if this opcode has operands associated with it then call scan_operands
+	if(operands){
+		int form = 0;
+		//check if the opcode is branch and handle the case	
+		if(currInfo->opcode == OP_BR){
+			int reg = util_parse_cond(token+2);
+			if(reg!=-1) currInfo->reg1 = reg;
+		
+		}
+		else{
+			if(strcmp(token, operands->forms[0].name)==0){
+				form = 0;
+			}
+			else form = 1;
+		}
+		currInfo->form = form;
+//printf("form name %s\n", operands->forms[form].name);
+//printf("form %d\n", form);
+		scan_operands(operands->forms[form].operands);
+	}
+
+	//5. make sure there are no extra operands: done in scan_operands
+}
+
+
+/** convert the reference into a PC offset
+ *  errors that may occur: reference not in the symbol table, offset out of range
+*/
+void encode_PC_offset_or_error (int width) {
+	symbol_t* symbol = symbol_find_by_name(lc3_sym_tab, currInfo->reference);
+	if(symbol == NULL){
+		asm_error(ERR_MISSING_LABEL, currInfo->reference);
+		return;
+	}
+	int pcOffset = (symbol->addr)-(currInfo->address)-1;
+	int fits = fieldFits(pcOffset, width, 1);
+	if(fits==0){
+		asm_error(ERR_BAD_PCOFFSET, currInfo->reference);
+		return;
+	}
+	if(width ==9){
+		currInfo->machineCode = setField(currInfo->machineCode, 8, 0, pcOffset);
+	}
+	else{
+		currInfo->machineCode = setField(currInfo->machineCode, 10, 0, pcOffset);
+	}
+
+}
+
+
+/** take one field from the currInfo structure and place it in the machineCode field
+ *  @param operand - the type of operand
+ */
+void encode_operand (operand_t operand) {
+  switch (operand) {
+    case FMT_R1:
+		case FMT_CC:
+		{
+			if(currInfo->reg1 != -1){
+     		currInfo->machineCode = setField(currInfo->machineCode, 11, 9, currInfo->reg1);
+			}
+		}
+      break;
+		case FMT_R2:
+		{
+			if(currInfo->reg2 != -1){
+     		currInfo->machineCode = setField(currInfo->machineCode, 8, 6, currInfo->reg2);
+			}
+		}
+			break;
+		case FMT_R3:
+		{
+			if(currInfo->reg3 != -1){
+     		currInfo->machineCode = setField(currInfo->machineCode, 2, 0, currInfo->reg3);
+			}
+		}
+			break;
+		case FMT_IMM5:
+		{
+			if(currInfo->immediate != 0){
+     		currInfo->machineCode = setField(currInfo->machineCode, 4, 0, currInfo->immediate);
+			}
+		}
+			break;
+		case FMT_IMM6:
+		{
+			if(currInfo->immediate != 0){
+     		currInfo->machineCode = setField(currInfo->machineCode, 5, 0, currInfo->immediate);
+			}
+		}
+			break;
+		case FMT_VEC8:
+		{
+			if(currInfo->immediate != 0){
+     		currInfo->machineCode = setField(currInfo->machineCode, 7, 0, currInfo->immediate);
+			}
+		}
+			break;
+		case FMT_PCO9:
+			encode_PC_offset_or_error(9);
+			break;
+		case FMT_PCO11:
+			encode_PC_offset_or_error(11);
+			break;
+		case FMT_STR:
+			//currInfo->reference = strdup(token);
+			break;
+    default://????
+      break;
+  }
+}
+
+
+
+/** 
+ * make sure ther next token is a comma and report an error if it is not
+ */
+void get_comma_or_error (void) {
+	char* token = next_token();
+	if(strcmp(token, ",")!=0){
+		asm_error(ERR_EXPECTED_COMMA, token);
+	}
+
+}
+
+/** 
+ * convert a token to an immediate value
+ * if the value is not in the correct format, or out of range, report an error
+ * if it is good store it in the immediate field of currInfo
+ * @param token - the string to be converted to an immediate
+ * @param width - how many bits are used to store the value
+ * @param specifies if the number is signed or unsigned
+
+*/
+void get_immediate_or_error (char* token, int width, int isSigned) {
+	int value;
+	int success = lc3_get_int(token, &value);
+	if(success==0){
+		asm_error(ERR_BAD_IMM, token);
+		return;
+	}
+
+	success = fieldFits(value, width, isSigned);
+	if(success==0){
+		asm_error(ERR_IMM_TOO_BIG, token);
+		return;
+	}
+	
+	currInfo->immediate = value;
+
+}
+/** 
+ * make sure it is a valid label
+ * if it is valid, store it in the reference field of curr info
+ * otherwise report an error
+ */
+void get_PC_offset_or_error (char* token) {
+	int valid = util_is_valid_label(token);
+	if(valid ==0){
+ 		asm_error(ERR_BAD_LABEL, token);
+		return;
+	}
+	
+	currInfo->reference = strdup(token);
+	//printf("strdup reference in PCoffset_or_error\n");
+
+}
+
+/** 
+ * convert a string to a register number and 
+ * report an error if the string does not represent a register
+ */
+int get_reg_or_error (char *token) {
+	int reg = util_get_reg(token);
+	if(reg == -1){
+		asm_error(ERR_EXPECTED_REG, token);
+	}
+  return reg;
+}
+
+/** 
+ * Open a file for reading and report an error on failure
+ * @return the file or NULL on error
+*/
+FILE *open_read_or_error (char* file_name) {
+  	FILE * fp = fopen(file_name, "r");
+	if(fp==NULL){
+		asm_error(ERR_OPEN_READ, file_name);
+	}
+	return fp;
+}
+
+/** 
+ * Open the file for writing and report an error on failure
+ * @return the file or NULL on error
+*/
+FILE *open_write_or_error (char* file_name) {
+    	FILE * fp = fopen(file_name, "w");
+	if(fp==NULL){
+		asm_error(ERR_OPEN_WRITE, file_name);
+	}
+	return fp;
+}
+
+/** 
+ * convenience function to convert the token to a value and store it in the currInfo data structure
+ */
+void get_operand (operand_t operand, char* token) {
+  switch (operand) {
+    case FMT_R1:
+      currInfo->reg1 = get_reg_or_error(token);
+      break;
+		case FMT_R2:
+			currInfo->reg2 = get_reg_or_error(token);
+			break;
+		case FMT_R3:
+		case FMT_IMM5:
+		{
+			int reg = util_get_reg(token);
+			if(reg != -1){
+				currInfo->reg3 = reg;
+				currInfo->form = 0;
+			}
+			else{
+				int value;
+				int success = lc3_get_int(token, &value);
+				if(success==0){
+					asm_error(ERR_EXPECT_REG_IMM, token);
+					return;
+				}
+				success = fieldFits(value, 5, 1);
+				if(success==0){
+					asm_error(ERR_IMM_TOO_BIG, token);
+					return;
+				}
+				currInfo->immediate = value;
+				currInfo->form = 1;
+			}
+		}
+			break;
+		case FMT_CC:
+			currInfo->reg1 = util_parse_cond(token);
+			break;
+		case FMT_IMM6:
+			get_immediate_or_error(token, 6, 1);
+			break;
+		case FMT_VEC8:
+			get_immediate_or_error(token, 8, 0);
+			break;
+		case FMT_ASC8:
+			//don't need
+			break;
+		case FMT_PCO9:
+		case FMT_PCO11:
+			get_PC_offset_or_error(token);
+			break;
+		case FMT_IMM16:
+			//if orig unsigned
+			if(currInfo->opcode==OP_ORIG){
+				get_immediate_or_error(token, 16, 0);
+			}
+			//if fill signed
+			else{
+				get_immediate_or_error(token, 16, 1);
+			}
+			break;
+		case FMT_STR:
+			currInfo->reference = strdup(token);
+			printf("strdup for fmt_str");
+			break;
+    default://????
+      break;
+  }
+}
+
+// can use ints instead of unsigned ints as long as v is never negative. This
+// is true for the use in LC3 assembler.
+// see http://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetKernighan
+int count_bits (int v) {
+	unsigned int c; // c accumulates the total bits set in v
+	for (c = 0; v; c++)
+	{
+		v &= v - 1; // clear the least significant bit set
+	}
+
+	
+  return c;
+}
+
+/** 
+ * a convenience function to scan all the operands of an LC3 instruction
+ * @param operands- a "list" of the operands for the current LC3 instruction encoded as individual bits 
+ * in an integer
+*/
+void scan_operands (operands_t operands) {
+  //printf("scan_operands() for %s\n", lc3_get_format_name(operands));
+  int operandCount = 0;
+	//1.initialize a count of the number of operands expected
+  int numOperands  = count_bits(operands);
+	//initialize a count of the number of errors found before this function was called
+  int errorCount   = numErrors;
+
+	//3. loop over all the possible operand types.
+	//if the operand type is used by this LC3 instruction
+  for (operand_t op = FMT_R1; op <= FMT_STR; op <<= 1) {
+    if (errorCount != numErrors)
+      return; // error, so skip processing remainder of line
+
+		if(operandCount>numOperands){
+			asm_error(ERR_EXTRA_OPERAND, next_token());
+			return;
+		}
+
+		//check if an operand is used
+    if(op&operands){
+	//get the next token and convert it to an operand
+	get_operand(op, next_token());
+	operandCount++;
+	//check for comma if all of the operands have not been processed
+			if(operandCount!=numOperands){
+				get_comma_or_error();
+			}
+		}
+		
+  }
+
+}
+
+/** this function determines how much space a LC3 instruction or pseudo-op will take 
+ *  and updating the static global variable currAddr
+ *  
+ */
+void update_address (void) {
+	//a line containing only a label does not change currAddr
+	if(currInfo->opcode ==OP_INVALID){
+		//do nothing
+	}
+	//.ORIG replaces the value of currAddr by its operand
+	else if(currInfo->opcode==OP_ORIG){
+		currAddr = currInfo->immediate;
+		currInfo->address = currAddr;
+	}
+	//.BLKW uses the number of words specified by its operand
+	else if(currInfo->opcode == OP_BLKW){
+		currAddr+=currInfo->immediate;
+	}
+	//.STRINGZ uses the length of the string minus one words
+	//WON'T BE TESTED
+	//
+	else{
+		currAddr++;
+	}
+
+}
+

@@ -1,0 +1,5 @@
+.ORIG x3000
+
+JSRR R3
+
+.END

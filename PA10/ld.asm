@@ -1,0 +1,7 @@
+.ORIG x3000
+
+LD R1,LABEL0
+
+LABEL0
+
+.END

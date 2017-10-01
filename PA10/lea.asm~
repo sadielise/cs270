@@ -1,0 +1,5 @@
+.ORIG x3000
+
+LEA R1,LABEL3
+
+.END

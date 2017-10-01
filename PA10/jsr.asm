@@ -1,0 +1,7 @@
+.ORIG x3000
+
+LABEL0
+
+JSR LABEL0
+
+.END

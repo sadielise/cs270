@@ -1,0 +1,6 @@
+.ORIG x3000
+
+STI R3,R4
+
+
+.END

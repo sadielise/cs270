@@ -1,0 +1,244 @@
+15	    printf("Enter b: ");
+16	    scanf("%d", &b);
+17	    printf("Enter c: ");
+18	    scanf("%d", &c);
+19	    quadratic(a, b, c, &r1, &r2);
+20	    printf("Roots are %3.2f and %3.2f\n", r1, r2);
+21	}
+Breakpoint 1 at 0x400861: file main.c, line 19.
+Breakpoint 2 at 0x40087c: file main.c, line 20.
+Starting program: /s/bach/n/under/sadiet/cs270/R3/r3 
+
+Breakpoint 1, main () at main.c:19
+19	    quadratic(a, b, c, &r1, &r2);
+Missing separate debuginfos, use: debuginfo-install glibc-2.18-14.fc20.x86_64
+$1 = 1
+$2 = 2
+$3 = 3
+$4 = -nan(0x7fe500)
+$5 = 0
+$6 = (float *) 0x7fffffffe410
+$7 = (float *) 0x7fffffffe40c
+quadratic (coeff1=1, coeff2=2, coeff3=3, root1=0x7fffffffe410, root2=0x7fffffffe40c)
+    at r3.c:10
+10	    if (coeff1 == 0)
+Breakpoint 3 at 0x4007de: file r3.c, line 21.
+Continuing.
+
+Breakpoint 3, quadratic (coeff1=1, coeff2=2, coeff3=3, root1=0x7fffffffe410, 
+    root2=0x7fffffffe40c) at r3.c:22
+22	}
+$8 = (float *) 0x7fffffffe410
+$9 = (float *) 0x7fffffffe40c
+$10 = -nan(0x400000)
+$11 = -nan(0x400000)
+0x7fffffffe410:	0xffc00000
+0x7fffffffe40c:	0xffc00000
+0x7fffffffe410:	-nan(0x400000)
+0x7fffffffe40c:	-nan(0x400000)
+Num     Type           Disp Enb Address            What
+1       breakpoint     keep y   0x0000000000400861 in main at main.c:19
+	breakpoint already hit 1 time
+2       breakpoint     keep y   0x000000000040087c in main at main.c:20
+3       breakpoint     keep y   0x00000000004007de in quadratic at r3.c:21
+	breakpoint already hit 1 time
+Num     Type           Disp Enb Address            What
+1       breakpoint     keep n   0x0000000000400861 in main at main.c:19
+	breakpoint already hit 1 time
+2       breakpoint     keep y   0x000000000040087c in main at main.c:20
+3       breakpoint     keep y   0x00000000004007de in quadratic at r3.c:21
+	breakpoint already hit 1 time
+Num     Type           Disp Enb Address            What
+2       breakpoint     keep y   0x000000000040087c in main at main.c:20
+3       breakpoint     keep y   0x00000000004007de in quadratic at r3.c:21
+	breakpoint already hit 1 time
+List of classes of commands:
+
+aliases -- Aliases of other commands
+breakpoints -- Making program stop at certain points
+data -- Examining data
+files -- Specifying and examining files
+internals -- Maintenance commands
+obscure -- Obscure features
+running -- Running the program
+stack -- Examining the stack
+status -- Status inquiries
+support -- Support facilities
+tracepoints -- Tracing of program execution without stopping the program
+user-defined -- User-defined commands
+
+Type "help" followed by a class name for a list of commands in that class.
+Type "help all" for the list of all commands.
+Type "help" followed by command name for full documentation.
+Type "apropos word" to search for commands related to "word".
+Command name abbreviations are allowed if unambiguous.
+Status inquiries.
+
+List of commands:
+
+info -- Generic command for showing things about the program being debugged
+info address -- Describe where symbol SYM is stored
+info all-registers -- List of all registers and their contents
+info args -- Argument variables of current stack frame
+info auto-load -- Print current status of auto-loaded files
+info auto-load gdb-scripts -- Print the list of automatically loaded sequences of commands
+info auto-load libthread-db -- Print the list of loaded inferior specific libthread_db
+info auto-load local-gdbinit -- Print whether current directory .gdbinit file has been loaded
+info auto-load python-scripts -- Print the list of automatically loaded Python scripts
+info auto-load-scripts -- Print the list of automatically loaded Python scripts
+info auxv -- Display the inferior's auxiliary vector
+info bookmarks -- Status of user-settable bookmarks
+info breakpoints -- Status of specified breakpoints (all user-settable breakpoints if no argument)
+info checkpoints -- IDs of currently known checkpoints
+info classes -- All Objective-C classes
+info common -- Print out the values contained in a Fortran COMMON block
+info copying -- Conditions for redistributing copies of GDB
+info dcache -- Print information on the dcache performance
+info display -- Expressions to display when program stops
+info exceptions -- List all Ada exception names
+info extensions -- All filename extensions associated with a source language
+info files -- Names of targets and files being debugged
+info float -- Print the status of the floating point unit
+info frame -- All about selected stack frame
+info frame-filter -- List all registered Python frame-filters
+info functions -- All function names
+info handle -- What debugger does when program gets various signals
+info inferiors -- IDs of specified inferiors (all inferiors if no argument)
+info line -- Core addresses of the code for a source line
+info locals -- Local variables of current stack frame
+info macro -- Show the definition of MACRO
+info macros -- Show the definitions of all macros at LINESPEC
+info mem -- Memory region attributes
+info os -- Show OS data ARG
+info pretty-printer -- GDB command to list all registered pretty-printers
+info probes -- Show available static probes
+info probes all -- Show information about all type of probes
+info probes stap -- Show information about SystemTap static probes
+info proc -- Show /proc process information about any running process
+info proc all -- List all available /proc info
+info proc cmdline -- List command line arguments of the process
+info proc cwd -- List current working directory of the process
+info proc exe -- List absolute filename for executable of the process
+info proc mappings -- List of mapped memory regions
+info proc stat -- List process info from /proc/PID/stat
+info proc status -- List process info from /proc/PID/status
+info program -- Execution status of the program
+info record -- Info record options
+info registers -- List of integer registers and their contents
+info scope -- List the variables local to a scope
+info selectors -- All Objective-C selectors
+info set -- Show all GDB settings
+info sharedlibrary -- Status of loaded shared object libraries
+info signals -- What debugger does when program gets various signals
+info skip -- Display the status of skips
+info source -- Information about the current source file
+info sources -- Source files in the program
+info stack -- Backtrace of the stack
+info static-tracepoint-markers -- List target static tracepoints markers
+info symbol -- Describe what symbol is at location ADDR
+info target -- Names of targets and files being debugged
+info tasks -- Provide information about all known Ada tasks
+info terminal -- Print inferior's saved terminal status
+info threads -- Display currently known threads
+info tracepoints -- Status of specified tracepoints (all tracepoints if no argument)
+info tvariables -- Status of trace state variables and their values
+info type-printers -- GDB command to list all registered type-printers
+info types -- All type names
+info variables -- All global and static variable names
+info vector -- Print the status of the vector unit
+info vtbl -- Show the virtual function table for a C++ object
+info warranty -- Various kinds of warranty you do not have
+info watchpoints -- Status of specified watchpoints (all watchpoints if no argument)
+info win -- List of all displayed windows
+macro -- Prefix for commands dealing with C preprocessor macros
+macro define -- Define a new C/C++ preprocessor macro
+macro expand -- Fully expand any C/C++ preprocessor macro invocations in EXPRESSION
+macro expand-once -- Expand C/C++ preprocessor macro invocations appearing directly in EXPRESSION
+macro list -- List all the macros defined using the `macro define' command
+macro undef -- Remove the definition of the C/C++ preprocessor macro with the given name
+show -- Generic command for showing things about the debugger
+show ada -- Generic command for showing Ada-specific settings
+show ada trust-PAD-over-XVS -- Show whether an optimization trusting PAD types over XVS types is activated
+show agent -- Show debugger's willingness to use agent as a helper
+show annotate -- Show annotation_level
+show architecture -- Show architecture of target
+show args -- Show argument list to give program being debugged when it is started
+show arm -- Various ARM-specific commands
+show arm abi -- Show the ABI
+show arm apcs32 -- Show usage of ARM 32-bit mode
+show arm disassembler -- Show the disassembly style
+show arm fallback-mode -- Show the mode assumed when symbols are unavailable
+show arm force-mode -- Show the mode assumed even when symbols are available
+show arm fpu -- Show the floating point type
+show auto-load -- Show auto-loading specific settings
+show auto-load gdb-scripts -- Show whether auto-loading of canned sequences of commands scrQuit
+#0  quadratic (coeff1=1, coeff2=2, coeff3=3, root1=0x7fffffffe410, root2=0x7fffffffe40c)
+    at r3.c:22
+#1  0x000000000040087c in main () at main.c:19
+All defined functions:
+
+File main.c:
+int main();
+
+File r3.c:
+void quadratic(int, int, int, float *, float *);
+
+Non-debugging symbols:
+0x0000000000400570  _init
+0x00000000004005a0  puts@plt
+0x00000000004005b0  printf@plt
+0x00000000004005c0  __libc_start_main@plt
+0x00000000004005d0  __gmon_start__@plt
+0x00000000004005e0  __isoc99_scanf@plt
+0x00000000004005f0  sqrt@plt
+0x0000000000400600  _start
+0x0000000000400630  deregister_tm_clones
+0x0000000000400660  register_tm_clones
+0x00000000004006a0  __do_global_dtors_aux
+0x00000000004006c0  frame_dummy
+0x00000000004008b0  __libc_csu_init
+0x0000000000400920  __libc_csu_fini
+0x0000000000400924  _fini
+0x00007ffff7dddab0  __libc_memalign@plt
+0x00007ffff7dddac0  malloc@plt
+0x00007ffff7dddad0  __tls_get_addr@plt
+0x00007ffff7dddae0  calloc@plt
+0x00007ffff7dddaf0  realloc@plt
+0x00007ffff7dddb00  free@plt
+0x00007ffff7dddb10  print_statistics
+0x00007ffff7ddde6e  do_preload
+0x00007ffff7dddef8  init_tls
+0x00007ffff7dddff4  oom
+0x00007ffff7dde012  tls_get_addr_tail
+0x00007ffff7dde133  update_get_addr
+0x00007ffff7dde16e  check_one_fd.part
+0x00007ffff7dde1f0  _start
+0x00007ffff7dde1f8  _dl_start_user
+0x00007ffff7dde240  _dl_initial_error_catch_tsd
+0x00007ffff7dde250  rtld_lock_default_lock_recursive
+0x00007ffff7dde260  rtld_lock_default_unlock_recursive
+0x00007ffff7dde270  lookup_doit
+0x00007ffff7dde2f0  dlmopen_doit
+0x00007ffff7dde340  print_unresolved
+0x00007ffff7dde380  print_missing_version
+0x00007ffff7dde3c0  map_doit
+0x00007ffff7dde3f0  relocate_doit
+0x00007ffff7dde410  process_dl_debug
+0x00007ffff7dde7f0  version_check_doit
+0x00007ffff7dde830  dl_main
+0x00007ffff7de16e0  _dl_start
+Quit
+Continuing.
+
+Breakpoint 2, main () at main.c:20
+20	    printf("Roots are %3.2f and %3.2f\n", r1, r2);
+a = 1
+b = 2
+c = 3
+r1 = -nan(0x400000)
+r2 = -nan(0x400000)
+A debugging session is active.
+
+	Inferior 1 [process 30689] will be killed.
+
+Quit anyway? (y or n) 

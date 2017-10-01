@@ -1,0 +1,7 @@
+.ORIG x3000
+
+LABEL0
+
+LDI R2,LABEL0
+
+.END

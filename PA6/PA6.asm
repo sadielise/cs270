@@ -1,0 +1,240 @@
+; PA6 Assignment
+; Author: Sadie Henry
+; Date:   10/26/14
+; Email:  sadiet@rams.colostate.edu
+; Class:  CS270
+;
+; Description: Implements the manipulation of half precision (16-bit) floating point numbers
+
+;------------------------------------------------------------------------------
+; Begin reserved section: do not change ANYTHING in reserved section!
+
+                .ORIG x3000
+                BR Main
+
+; A jump table defined as an array of addresses
+Functions       .FILL flt16_add      ; (option 0)
+                .FILL flt16_sub      ; (option 1)
+                .FILL flt16_get_sign ; (option 2)
+                .FILL flt16_get_exp  ; (option 3)
+                .FILL flt16_get_val  ; (option 4)
+                .FILL flt16_abs      ; (option 5)
+                .FILL flt16_neg      ; (option 6)
+                .FILL left_most1     ; (option 7)
+                .FILL left_shift     ; (option 8)
+                .FILL right_shift    ; (option 9)
+                .FILL binary_or      ; (option 10)
+
+Main            LEA R0,Functions     ; get base of jump table
+                LD  R1,Option        ; get option to use, no error checking
+                ADD R0,R0,R1         ; add index of array
+                LDR R0,R0,#0         ; get address of function
+                JSRR R0              ; call selected function
+                HALT
+
+; Parameters and return values for all functions
+Option          .BLKW 1              ; which function to call
+Param1          .BLKW 1              ; space to specify first parameter
+Param2          .BLKW 1              ; space to specify second parameter
+Result          .BLKW 1              ; space to store result
+
+; You may add variables and functions after here as you see fit. You may use JSR
+; within the code of flt16_add or other functions. However, this requires that
+; you save and restore return addresses, otherwise a function will not be able
+; to use JSR to call another subroutine. See flt16_add for an example of how to
+; save and restore a return address. When will this scheme NOT work?
+
+; Here are some useful constants:
+
+SIGN_MASK       .FILL x8000          ; 1 in left most bit 
+EXP_MASK        .FILL x001F          ; exactly 5 bits     
+VAL_MASK        .FILL x03FF          ; exactly 10 bits    
+IMPL1_MASK      .FILL x0400          ; 1 in the 11 bit    
+ONE             .FILL #1             ; the number 1       
+TEN             .FILL #10            ; the number 10      
+SIXTEEN         .FILL #16            ; the value 16
+ABS_MASK	.FILL x7FFF	     ; mask for absolute value
+EXP_MASK2	.FILL x7C00	     ; mask for exponent
+NEG_MASK1	.FILL x8000	     ; mask for negation
+NEG_MASK2	.FILL x7FFF	     ; mask for negation
+FIFTEEN		.FILL x000F	     ; the number 15
+ALL_ONES	.FILL xFFFF	     ; all ones
+
+; End reserved section: do not change ANYTHING in reserved section!
+;------------------------------------------------------------------------------
+
+; Local variables, this is how you will be tested for PA6
+; Do not change the names!
+signX           .BLKW 1              ; sign of X
+expX            .BLKW 1              ; exponent of X
+valX            .BLKW 1              ; mantissa of X
+signY           .BLKW 1              ; sign of Y
+expY            .BLKW 1              ; exponent of Y
+valY            .BLKW 1              ; mantissa of Y
+signSum         .BLKW 1              ; sign of sum
+expSum          .BLKW 1              ; exponent of sum
+valSum          .BLKW 1              ; mantissa of sum
+expDiff         .BLKW 1              ; save difference
+left1           .BLKW 1              ; location of left most 1
+
+flt16_add_RA    .BLKW 1              ; return address storage for flt16_add
+rShift_RA	.BLKW 1		     ; return address storage for right_shift
+exp_RA		.BLKW 1		     ; return address storage for get_exp
+exp_val		.BLKW 1		     ; address storage for get_exp value
+lm1_val		.BLKW 1		     ; address storage for lm1 value
+lm1_RA		.BLKW 1		     ; return address storage for lm1
+lm1_count	.BLKW 1	  	     ; address storage for lm1 counter   
+
+flt16_add       ST R7,flt16_add_RA   ; save return address
+                                     ; DON'T IMPLEMENT
+                LD R7,flt16_add_RA   ; restore return address
+                RET
+;------------------------------------------------------------------------------
+flt16_sub                            ; Result is Param1 minus Param2
+                                     ; DON'T IMPLEMENT
+                RET
+;------------------------------------------------------------------------------
+flt16_get_sign                       ; Result is 0 if Param1 is positive, 1 otherwise
+                AND R0,R0,#0         ; Initialize result
+                LD R1,Param1         ; Get first parameter
+                BRzp return_sign     ; Sign is 0 (zero or positive)
+                ADD  R0,R0,#1        ; Sign is 1 (negative)
+return_sign     ST R0,Result         ; Save the result
+                RET
+;------------------------------------------------------------------------------
+flt16_get_exp                        ; Result is biased exponent from Param1
+		LD R0,Param1	     ; load Param1 into R0 (value)
+		LD R1,EXP_MASK2	     ; load exponent mask 
+		AND R1,R0,R1	     ; & R0 and R1
+		LD R2,TEN
+		ST R2,Param2	     ; load shift counter into Param2
+		ST R7,exp_RA	     ; save the return address
+		JSR right_shift	     ; jump to right shift
+		LD R3,Result	     ; load result
+		LD R7,exp_RA	     ; reload return address
+		ST R3,Result
+                
+                RET
+;------------------------------------------------------------------------------
+flt16_get_val                        ; Result is mantissa from Param1 plus implicit 1
+		LD R0,Param1	     ; load R0 Param1 into
+		BRnp continue1
+		BR finish	     
+continue1	LD R1,VAL_MASK	     ; load value mask into R1
+		LD R2,IMPL1_MASK     ; load implicit 1 mask into R2
+		AND R1,R1,R0	     ; & R0 and R1
+		ADD R2,R2,R1	     ; & R1 and R2
+finish		ST R2,Result	     ; store result		
+
+                RET
+;------------------------------------------------------------------------------
+flt16_abs                            ; Result is absolute value of Param1
+		LD R0,Param1	     ; load Param1 into R0 (value)
+		LD R1,ABS_MASK	     ; load abs mask into R1
+		AND R0,R0,R1	     ; & the value with the abs mask
+                ST R0,Result         ; store result
+                RET
+;------------------------------------------------------------------------------
+flt16_neg                            ; Result is negative value of Param1
+		LD R0,Param1	     ; load Param1 into R0
+		BRp positive
+		LD R1,NEG_MASK2
+		AND R0,R0,R1
+		BR finish1
+positive	LD R1,NEG_MASK1		
+		ADD R0,R0,R1
+		BR finish1
+finish1         ST R0,Result         ; store result
+                RET
+;------------------------------------------------------------------------------
+left_most1                           ; Result is bit position of leftmost 1 in Param1
+		LD R0,Param1	     ; load Param 1 into R0
+		BRz isZero	     ; branch if value is zero
+		LD R1,SIGN_MASK	     ; load sign mask into R1
+		LD R2,FIFTEEN	     ; load counter into R2 
+
+compare		LD R0,Param1	     ; load Param1 into R0
+		AND R3,R0,R1	     ; & R1 and R0
+		BRnp foundIt	     ; branch if found
+		ST R2,lm1_count	     ; store counter
+		ST R7,lm1_RA	     ; store return address
+		ST R0,lm1_val	     ; store Param1
+		LD R4,ONE	     ; load counter for shift
+		ST R4,Param2	     ; store counter for shift
+		ST R1,Param1	     ; store mask to be shifted
+		JSR right_shift	     ; jump to right shift
+		LD R0,lm1_val	     ; reload Param1 into R0
+		ST R0,Param1	     ; reload R0 into Param1
+		LD R7,lm1_RA	     ; reload the return address
+		LD R1,Result	     ; load shifted mask into R1
+		LD R2,lm1_count	     ; reload the counter
+		ADD R2,R2,#-1	     ; decrement counter	
+		BRp compare	
+		BR foundIt		
+
+isZero		LD R2,ALL_ONES	     ; set result to xFFFF
+		BR foundIt	     ; go to return
+
+foundIt		ST R2,Result
+	        RET
+;------------------------------------------------------------------------------
+left_shift                           ; Result is Param1 shifted left by Param2 bits
+		LD R1,Param1	     ; load Param1 into R1 (value)
+		LD R2,Param2	     ; load Param2 into R2 (counter)
+		BRp lShift
+		BR finish2
+
+lShift		ADD R1,R1,R1	     ; shift value to the left
+		ADD R2,R2,#-1	     ; decrement counter
+		BRp lShift
+                                   
+finish2		ST R1,Result	     ; store the result
+                RET
+;------------------------------------------------------------------------------
+right_shift                          ; Result is Param1 shifted right by Param2 bits
+		AND R0,R0,#0	     ; initialize result
+		LD R1,Param1	     ; load Param1 into R1 (value)
+		LD R2,Param2	     ; load Param2 into R2 (counter)
+		LD R3,ONE	     ; load input mask into R3
+shiftL		ADD R3,R3,R3	     ; shift mask to the left
+		ADD R2,R2,#-1	     ; decrement counter
+		BRp shiftL	     ;
+
+		LD R2,Param2	     ; reload Param2 into R2 (counter)		
+		LD R4,SIXTEEN        ; load 16 into R3
+		NOT R2,R2	     ; flip the bits in R2
+		ADD R2,R2,#1	     ; add 1	
+		ADD R2,R2,R4         ; subtract counter from 16 to get actual counter
+
+		LD R4,ONE	     ; load output mask into R4
+	
+rShift		AND R5,R1,R3	     ; & the input mask with the value
+		BRnp isSet	     ; branch if that bit is set
+		BR continue
+
+isSet		ADD R0,R0,R4	     ; add output mask to R0
+		BR continue
+		
+continue	ADD R3,R3,R3	     ; shift input mask left by 1
+		ADD R4,R4,R4	     ; shift output mask left by 1
+		ADD R2,R2,#-1	     ; decrement the counter
+		BRp rShift		
+		
+                ST R0,Result         ; store the result
+                RET
+;------------------------------------------------------------------------------
+binary_or                            ; Result is a bitwise OR of Param1 and Param2
+		LD R1,Param1	     ; load Param1 into R1
+		LD R2,Param2	     ; load Param2 into R2
+		NOT R1,R1	     ; negate R1
+		NOT R2,R2	     ; negate R2
+		AND R3,R1,R2	     ; and R1 and R2
+		NOT R3,R3	     ; negate R3
+
+		ST R3,Result	     ; store result
+                            
+                RET
+;------------------------------------------------------------------------------
+                .END
+
+

@@ -1,0 +1,14 @@
+.ORIG x3000
+
+    BR LABEL0
+    BRn LABEL0
+    BRz LABEL0
+    BRp LABEL0
+    BRnz LABEL0
+    BRnp LABEL0
+    BRzp LABEL0
+    BRnzp LABEL0
+
+LABEL0
+
+.END
